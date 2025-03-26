@@ -67,7 +67,7 @@ emotion_button_style = """
 """
 st.markdown(emotion_button_style, unsafe_allow_html=True)
 
-# 감정 버튼 정의
+# 전역 변수로 감정 버튼 정의
 emotions = {
     "기쁨": "😊",
     "슬픔": "😢",
@@ -120,6 +120,8 @@ def show_login_page():
 
 # 감정 선택 페이지
 def show_emotion_select_page():
+    global emotions  # 전역 변수 emotions 사용
+    
     st.title("Mindtone")
     st.write(f"안녕하세요, {st.session_state.username}님! 지금 어떤 감정이 드시나요?")
     
@@ -145,8 +147,8 @@ def show_emotion_select_page():
         db = next(get_db())
         conversations = db.query(Conversation).filter(Conversation.user_id == st.session_state.user_id).all()
         if conversations:
-            emotions = [conv.emotion for conv in conversations]
-            emotion_counts = pd.Series(emotions).value_counts()
+            emotions_list = [conv.emotion for conv in conversations]
+            emotion_counts = pd.Series(emotions_list).value_counts()
             fig = px.pie(values=emotion_counts.values, names=emotion_counts.index, title="감정 분포")
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -199,6 +201,8 @@ def show_emotion_select_page():
 
 # 채팅 페이지
 def show_chat_page():
+    global emotions  # 전역 변수 emotions 사용
+    
     st.title("Mindtone")
     
     # 탐색 버튼
