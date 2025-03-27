@@ -1,0 +1,13 @@
+credentials:
+  usernames:
+    admin:
+      email: admin@example.com
+      name: 관리자
+      password: $2b$12$I3JeQbv.rIVIidx9fTugeu5jxpv955wE2n1MwN1EceMCvqZvAD.8m # 기본 비밀번호: admin123
+cookie:
+  expiry_days: 30
+  key: mindtone_auth_key
+  name: mindtone_auth
+preauthorized:
+  emails:
+    - admin@example.com 
