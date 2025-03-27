@@ -1,0 +1,17 @@
+cookie:
+  expiry_days: 30
+  key: mindtone_auth_key
+  name: mindtone_auth
+credentials:
+  usernames:
+    admin:
+      email: admin@example.com
+      name: Admin
+      password: $2b$12$I3JeQbv.rIVIidx9fTugeu5jxpv955wE2n1MwN1EceMCvqZvAD.8m
+    adminchul:
+      email: admin@gmail.com
+      name: "\uC900\uCCA0"
+      password: $2b$12$/J14GEw8sdRDrsjPuaKffe2SLxzl3Nju0iWkXBzVIBmbU4ju6MW.q
+preauthorized:
+  emails:
+  - admin@example.com
