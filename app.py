@@ -1,318 +1,139 @@
 import streamlit as st
-import pandas as pd
-from datetime import datetime
-from PIL import Image
+import openai
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 
 # .env 파일 로드
 load_dotenv()
 
-# OpenAI API 키 확인
-api_key = os.getenv("OPENAI_API_KEY")
-api_key_is_valid = api_key and api_key != "your_openai_api_key_here"
-
-# 커스텀 모듈 불러오기
-import utils
-from data_handler import (
-    init_data_dir, save_memory, save_today_word, load_today_word,
-    load_all_memories, load_recent_memories, load_all_emotions,
-    visualize_emotions, load_image, get_data_dir, get_file_paths
+# 페이지 설정
+st.set_page_config(
+    page_title="Mindtone - 감정 지원 챗봇",
+    page_icon="💭",
+    layout="centered"
 )
-from gpt_handler import analyze_conversation
 
-# 페이지 기본 설정
-utils.page_config()
+# 사이드바에 앱 정보 표시
+st.sidebar.title("Mindtone")
+st.sidebar.write("감정 지원 AI 챗봇")
+st.sidebar.divider()
+st.sidebar.write("자신의 감정을 선택하고 AI와 대화하세요.")
 
-# 배경 추가 (원하는 이미지 URL로 변경 가능)
-utils.add_bg_from_url('https://img.freepik.com/premium-vector/cute-romantic-hand-drawn-doodle-pattern-background_179234-513.jpg')
-
-# 헤더 표시
-utils.display_header()
-
-# 데이터 디렉토리 초기화
-init_data_dir()
+# OpenAI API 키 설정
+openai.api_key = os.getenv('OPENAI_API_KEY')
+if not openai.api_key:
+    st.error("OpenAI API 키가 설정되지 않았습니다. .env 파일에 OPENAI_API_KEY를 설정해주세요.")
+    st.stop()
 
 # 세션 상태 초기화
-if 'current_page' not in st.session_state:
-    st.session_state.current_page = 'home'
-if 'show_api_settings' not in st.session_state:
-    st.session_state.show_api_settings = False
-if 'show_debug_info' not in st.session_state:
-    st.session_state.show_debug_info = False
-if 'memories_updated' not in st.session_state:
-    st.session_state.memories_updated = False
-if 'emotions_updated' not in st.session_state:
-    st.session_state.emotions_updated = False
-if 'today_word_updated' not in st.session_state:
-    st.session_state.today_word_updated = False
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+if 'current_emotion' not in st.session_state:
+    st.session_state.current_emotion = None
 
-# OpenAI API 키 저장 함수
-def save_api_key(api_key):
-    try:
-        with open('.env', 'w') as f:
-            f.write(f'OPENAI_API_KEY={api_key}')
-        return True
-    except Exception as e:
-        st.error(f"API 키 저장 중 오류 발생: {e}")
-        return False
+# 메인 페이지 제목
+st.title("Mindtone")
+st.write("지금 어떤 감정이 드시나요?")
 
-# 사이드바 네비게이션
-st.sidebar.title("메뉴")
+# 감정 버튼 스타일 설정
+emotion_button_style = """
+<style>
+    div.emotion-button > button {
+        background-color: #f0f2f6;
+        border-radius: 12px;
+        padding: 15px 15px;
+        font-size: 16px;
+        margin: 5px;
+        transition: all 0.3s;
+    }
+    div.emotion-button > button:hover {
+        background-color: #e0e2e6;
+        transform: translateY(-2px);
+    }
+    div.emotion-active > button {
+        background-color: #6c7ac9;
+        color: white;
+    }
+</style>
+"""
+st.markdown(emotion_button_style, unsafe_allow_html=True)
 
-# API 키 설정 기능
-if not api_key_is_valid:
-    st.sidebar.error("⚠️ OpenAI API 키가 설정되지 않았습니다.")
+# 감정 버튼 정의
+emotions = {
+    "기쁨": "😊",
+    "슬픔": "😢",
+    "화남": "😠",
+    "불안": "😰",
+    "지침": "😩",
+    "혼란": "😕",
+    "희망": "🌈",
+    "감사": "🙏"
+}
+
+# 감정 버튼 행 생성
+col1, col2, col3, col4 = st.columns(4)
+cols = [col1, col2, col3, col4]
+
+for idx, (emotion, emoji) in enumerate(emotions.items()):
+    col_idx = idx % 4
+    button_text = f"{emoji} {emotion}"
     
-    if st.sidebar.button("API 키 설정"):
-        st.session_state.show_api_settings = True
+    # 선택된 감정에 active 클래스 추가
+    button_class = "emotion-button"
+    if st.session_state.current_emotion == emotion:
+        button_class += " emotion-active"
     
-    st.sidebar.info("""
-    API 키 설정 방법:
-    1. OpenAI에서 API 키 발급
-    2. 위 버튼을 클릭하여 API 키 입력
-    3. 또는 `.env.example` 파일을 `.env`로 복사하고 API 키 입력
-    """)
+    with cols[col_idx]:
+        st.markdown(f'<div class="{button_class}">', unsafe_allow_html=True)
+        if st.button(button_text, key=f"emotion_{emotion}"):
+            st.session_state.current_emotion = emotion
+            if not st.session_state.messages:
+                # AI의 첫 응답 추가
+                ai_first_msg = f"안녕하세요! 오늘 {emotion} 감정을 느끼고 계시는군요. 어떤 일이 있으신가요?"
+                st.session_state.messages.append({"role": "assistant", "content": ai_first_msg})
+        st.markdown('</div>', unsafe_allow_html=True)
+
+st.divider()
+
+# 현재 선택된 감정 표시
+if st.session_state.current_emotion:
+    st.write(f"현재 감정: {emotions[st.session_state.current_emotion]} {st.session_state.current_emotion}")
+    
+    # 채팅 인터페이스 표시
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+    
+    # 사용자 입력
+    if prompt := st.chat_input("메시지를 입력하세요"):
+        # 사용자 메시지 추가
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.write(prompt)
+            
+        # AI 응답 생성
+        with st.chat_message("assistant"):
+            with st.spinner("생각 중..."):
+                # 시스템 메시지로 현재 감정 정보 전달
+                messages = [
+                    {"role": "system", "content": f"당신은 감정 지원 AI 챗봇입니다. 사용자가 '{st.session_state.current_emotion}' 감정을 느끼고 있습니다. 공감적이고 이해심 있는 태도로 대화해주세요."}
+                ]
+                
+                # 이전 대화 기록 추가
+                for msg in st.session_state.messages:
+                    messages.append(msg)
+                
+                # API 호출
+                response = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=messages
+                )
+                
+                ai_response = response.choices[0].message.content
+                st.write(ai_response)
+                
+                # AI 응답 저장
+                st.session_state.messages.append({"role": "assistant", "content": ai_response})
 else:
-    st.sidebar.success("✅ OpenAI API 키가 설정되었습니다.")
-    if st.sidebar.button("API 키 재설정"):
-        st.session_state.show_api_settings = True
-
-# 데이터 디버깅 정보 표시 토글
-if st.sidebar.button("디버그 정보 표시" if not st.session_state.show_debug_info else "디버그 정보 숨기기"):
-    st.session_state.show_debug_info = not st.session_state.show_debug_info
-
-# 디버그 정보 표시
-if st.session_state.show_debug_info:
-    st.sidebar.subheader("디버그 정보")
-    data_dir = get_data_dir()
-    data_dir, memories_file, emotions_file, today_word_file, images_dir = get_file_paths()
-    
-    st.sidebar.write(f"데이터 디렉토리: {data_dir}")
-    st.sidebar.write(f"쓰기 권한: {os.access(data_dir, os.W_OK)}")
-    
-    if os.path.exists(memories_file):
-        try:
-            memories = pd.read_csv(memories_file)
-            st.sidebar.write(f"추억 수: {len(memories)}")
-        except:
-            st.sidebar.write("추억 파일 읽기 오류")
-    else:
-        st.sidebar.write("추억 파일 없음")
-    
-    if os.path.exists(emotions_file):
-        try:
-            emotions = pd.read_csv(emotions_file)
-            st.sidebar.write(f"감정 기록 수: {len(emotions)}")
-        except:
-            st.sidebar.write("감정 파일 읽기 오류")
-    else:
-        st.sidebar.write("감정 파일 없음")
-    
-    if os.path.exists(today_word_file):
-        st.sidebar.write("오늘의 한마디 파일 있음")
-    else:
-        st.sidebar.write("오늘의 한마디 파일 없음")
-    
-    st.sidebar.write("세션 상태:")
-    st.sidebar.write(f"- 추억 업데이트됨: {st.session_state.memories_updated}")
-    st.sidebar.write(f"- 감정 업데이트됨: {st.session_state.emotions_updated}")
-    st.sidebar.write(f"- 오늘의 한마디 업데이트됨: {st.session_state.today_word_updated}")
-
-# API 키 설정 UI
-if st.session_state.show_api_settings:
-    with st.sidebar.form("api_key_form"):
-        new_api_key = st.text_input("OpenAI API 키", type="password", help="https://platform.openai.com/api-keys 에서 API 키를 발급받으세요.")
-        submit_key = st.form_submit_button("저장")
-        
-        if submit_key and new_api_key:
-            if save_api_key(new_api_key):
-                st.success("API 키가 저장되었습니다. 앱을 새로고침해주세요.")
-                st.session_state.show_api_settings = False
-                api_key = new_api_key
-                api_key_is_valid = True
-
-# 네비게이션 버튼들
-if st.sidebar.button("🏠 홈"):
-    st.session_state.current_page = 'home'
-if st.sidebar.button("📚 추억 타임라인"):
-    st.session_state.current_page = 'timeline'
-if st.sidebar.button("💬 대화 분석"):
-    st.session_state.current_page = 'conversation'
-if st.sidebar.button("📊 감정 히스토리"):
-    st.session_state.current_page = 'emotions'
-
-# 현재 페이지에 따라 다른 내용 표시
-if st.session_state.current_page == 'home':
-    # 홈 페이지
-    st.title("🏠 홈")
-    
-    if not api_key_is_valid:
-        st.warning("⚠️ OpenAI API 키가 설정되지 않았습니다. 사이드바에서 API 키를 설정해주세요.")
-    
-    # 오늘의 한마디
-    st.header("💌 오늘의 한마디")
-    
-    # 기존의 오늘의 한마디 불러오기
-    today_word_data = load_today_word()
-    today_word = today_word_data.get('word', '')
-    
-    # 오늘의 한마디 입력 폼
-    with st.form("today_word_form"):
-        new_word = st.text_area("오늘 하고 싶은 말을 적어보세요:", value=today_word, height=100)
-        submit_word = st.form_submit_button("저장하기")
-    
-    if submit_word:
-        if save_today_word(new_word):
-            st.success("오늘의 한마디가 저장되었습니다! 💕")
-            if st.session_state.today_word_updated:
-                st.rerun()
-    
-    # 최근 추억 표시
-    st.header("✨ 최근 추억")
-    recent_memories = load_recent_memories(3)
-    
-    if not recent_memories.empty:
-        for _, memory in recent_memories.iterrows():
-            # 이미지 로드
-            image = None
-            if memory['image_path'] and not pd.isna(memory['image_path']):
-                image = load_image(memory['image_path'])
-            
-            # 메모리 카드 표시
-            utils.display_memory_card(
-                memory['date'],
-                memory['title'],
-                memory['content'],
-                memory['summary'],
-                memory['emotion'],
-                memory['empathy'],
-                image
-            )
-    else:
-        st.info("아직 저장된 추억이 없어요! '대화 분석' 탭에서 새로운 추억을 만들어보세요.")
-
-elif st.session_state.current_page == 'timeline':
-    # 추억 타임라인 페이지
-    st.title("📚 추억 타임라인")
-    
-    # 모든 추억 불러오기
-    all_memories = load_all_memories()
-    
-    if not all_memories.empty:
-        for _, memory in all_memories.iterrows():
-            # 이미지 로드
-            image = None
-            if memory['image_path'] and not pd.isna(memory['image_path']):
-                image = load_image(memory['image_path'])
-            
-            # 메모리 카드 표시
-            utils.display_memory_card(
-                memory['date'],
-                memory['title'],
-                memory['content'],
-                memory['summary'],
-                memory['emotion'],
-                memory['empathy'],
-                image
-            )
-    else:
-        st.info("아직 저장된 추억이 없어요! '대화 분석' 탭에서 새로운 추억을 만들어보세요.")
-
-elif st.session_state.current_page == 'conversation':
-    # 대화 분석 페이지
-    st.title("💬 대화 분석")
-    
-    # API 키 미설정 경고
-    if not api_key_is_valid:
-        st.warning("⚠️ OpenAI API 키가 설정되지 않아 AI 분석 기능을 사용할 수 없습니다. 사이드바에서 API 키를 설정해주세요.")
-    
-    st.markdown("""
-    대화 내용을 입력하면 AI가 다음을 생성합니다:
-    1. 따뜻한 요약
-    2. 감정 분석
-    3. 공감 멘트
-    """)
-    
-    # 대화 입력 폼
-    with st.form("conversation_form"):
-        title = st.text_input("추억의 제목:")
-        conversation = st.text_area("대화 내용을 입력하세요:", height=200)
-        
-        # 이미지 업로드
-        uploaded_file = st.file_uploader("이미지 추가하기 (선택사항)", type=["jpg", "jpeg", "png"])
-        
-        analyze_button = st.form_submit_button("분석하기")
-    
-    # 분석 버튼이 클릭되었을 때
-    if analyze_button and conversation and title:
-        with st.spinner("AI가 대화를 분석하고 있어요..."):
-            # GPT로 대화 분석
-            summary, emotion, empathy = analyze_conversation(conversation)
-            
-            # 결과 표시
-            st.success("대화 분석이 완료되었습니다!")
-            
-            st.subheader("🌟 요약")
-            st.write(summary)
-            
-            st.subheader("💭 감정 분석")
-            st.write(emotion)
-            
-            st.subheader("💌 공감 멘트")
-            st.write(empathy)
-            
-            # 이미지 처리
-            image = None
-            if uploaded_file is not None:
-                image = Image.open(uploaded_file)
-                st.image(image, caption="업로드된 이미지", use_column_width=True)
-            
-            # 저장 버튼
-            if st.button("추억으로 저장하기"):
-                if save_memory(title, conversation, summary, emotion, empathy, image):
-                    st.success("추억이 저장되었습니다! 💕")
-                    # 타임라인 페이지로 이동
-                    if st.session_state.memories_updated:
-                        st.session_state.current_page = 'timeline'
-                        st.rerun()
-    elif analyze_button:
-        if not title:
-            st.error("추억의 제목을 입력해주세요.")
-        if not conversation:
-            st.error("대화 내용을 입력하세요.")
-
-elif st.session_state.current_page == 'emotions':
-    # 감정 히스토리 페이지
-    st.title("📊 감정 히스토리")
-    
-    # 모든 감정 데이터 불러오기
-    emotions_data = load_all_emotions()
-    
-    if not emotions_data.empty:
-        # 감정 시각화
-        emotion_chart = visualize_emotions()
-        
-        if emotion_chart:
-            st.image(f"data:image/png;base64,{emotion_chart}", use_column_width=True)
-        
-        # 감정 데이터 테이블로 표시
-        st.subheader("감정 기록")
-        
-        # 날짜 포맷 변경
-        emotions_data['formatted_date'] = emotions_data['date'].apply(utils.format_date)
-        
-        # 테이블 표시
-        for _, emotion in emotions_data.iterrows():
-            st.markdown(f"""
-            <div style="background-color: #f0f8ff; padding: 15px; border-radius: 10px; margin-bottom: 10px;">
-                <div style="font-weight: bold; color: #1565C0;">{emotion['formatted_date']}</div>
-                <div style="font-size: 18px; margin: 10px 0;">{emotion['emotion']}</div>
-                <div style="color: #757575; font-size: 14px;">{emotion['reason']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.info("아직 감정 기록이 없어요! '대화 분석' 탭에서 대화를 통해 감정을 기록해보세요.")
-
-# 푸터 추가
-utils.create_footer() 
+    st.info("대화를 시작하려면 위에서 감정을 선택해주세요.") 
