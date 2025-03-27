@@ -1,11 +1,10 @@
 import streamlit as st
 import openai
 import os
-import yaml  # yaml 모듈 직접 임포트
+import json  # yaml 대신 json 사용
 from datetime import datetime
 from dotenv import load_dotenv
 import streamlit_authenticator as stauth
-from yaml.loader import SafeLoader
 
 # .env 파일 로드
 load_dotenv()
@@ -49,10 +48,38 @@ if 'name' not in st.session_state:
 if 'emotion_selected' not in st.session_state:
     st.session_state.emotion_selected = False
 
+# config.yaml 대신 JSON 설정
+default_config = {
+    "credentials": {
+        "usernames": {
+            "admin": {
+                "email": "admin@example.com",
+                "name": "Admin",
+                "password": "$2b$12$I3JeQbv.rIVIidx9fTugeu5jxpv955wE2n1MwN1EceMCvqZvAD.8m"  # admin123
+            }
+        }
+    },
+    "cookie": {
+        "expiry_days": 30,
+        "key": "mindtone_auth_key",
+        "name": "mindtone_auth"
+    },
+    "preauthorized": {
+        "emails": ["admin@example.com"]
+    }
+}
+
 # 사용자 인증 설정
 try:
-    with open('config.yaml', 'r', encoding='utf-8') as file:
-        config = yaml.load(file, Loader=SafeLoader)
+    # JSON 파일이 있으면 로드, 없으면 기본 설정 사용
+    config_file = 'config.json'
+    if os.path.exists(config_file):
+        with open(config_file, 'r', encoding='utf-8') as file:
+            config = json.load(file)
+    else:
+        config = default_config
+        with open(config_file, 'w', encoding='utf-8') as file:
+            json.dump(config, file, indent=4)
     
     authenticator = stauth.Authenticate(
         config['credentials'],
@@ -90,8 +117,8 @@ try:
             try:
                 if authenticator.register_user("회원가입", preauthorization=False):
                     st.success("회원가입이 완료되었습니다!")
-                    with open('config.yaml', 'w', encoding='utf-8') as file:
-                        yaml.dump(config, file, default_flow_style=False)
+                    with open(config_file, 'w', encoding='utf-8') as file:
+                        json.dump(config, file, indent=4)
             except Exception as e:
                 st.error(e)
     
@@ -224,5 +251,5 @@ try:
 
 except Exception as e:
     st.error(f"오류가 발생했습니다: {e}")
-    if os.path.exists('config.yaml') == False:
-        st.info("config.yaml 파일이 없습니다. 어플리케이션을 처음 실행하는 경우 이 메시지가 표시될 수 있습니다.") 
+    if os.path.exists('config.json') == False:
+        st.info("config.json 파일이 없습니다. 어플리케이션을 처음 실행하는 경우 이 메시지가 표시될 수 있습니다.") 
