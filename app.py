@@ -1,7 +1,14 @@
 import streamlit as st
 import openai
 import os
-import yaml
+try:
+    import yaml
+except ImportError:
+    # PyYAML이 설치되어 있는지 확인하고 필요하면 설치합니다.
+    import sys
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyYAML"])
+    import yaml
 from datetime import datetime
 from dotenv import load_dotenv
 import streamlit_authenticator as stauth
