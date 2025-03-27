@@ -1,7 +1,14 @@
 import streamlit as st
 import openai
 import os
-import yaml
+try:
+    import yaml
+except ImportError:
+    # PyYAML이 설치되어 있는지 확인하고 필요하면 설치합니다.
+    import sys
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyYAML"])
+    import yaml
 from datetime import datetime
 from dotenv import load_dotenv
 import streamlit_authenticator as stauth
@@ -16,6 +23,18 @@ st.set_page_config(
     page_icon="💭",
     layout="centered"
 )
+
+# 감정 버튼 정의 (전역 변수로 이동)
+emotions = {
+    "기쁨": "😊",
+    "슬픔": "😢",
+    "화남": "😠",
+    "불안": "😰",
+    "지침": "😩",
+    "혼란": "😕",
+    "희망": "🌈",
+    "감사": "🙏"
+}
 
 # OpenAI API 키 설정
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -39,7 +58,7 @@ if 'emotion_selected' not in st.session_state:
 
 # 사용자 인증 설정
 try:
-    with open('config.yaml') as file:
+    with open('config.yaml', 'r', encoding='utf-8') as file:
         config = yaml.load(file, Loader=SafeLoader)
     
     authenticator = stauth.Authenticate(
@@ -78,7 +97,7 @@ try:
             try:
                 if authenticator.register_user("회원가입", preauthorization=False):
                     st.success("회원가입이 완료되었습니다!")
-                    with open('config.yaml', 'w') as file:
+                    with open('config.yaml', 'w', encoding='utf-8') as file:
                         yaml.dump(config, file, default_flow_style=False)
             except Exception as e:
                 st.error(e)
@@ -131,18 +150,6 @@ try:
             </style>
             """
             st.markdown(emotion_button_style, unsafe_allow_html=True)
-            
-            # 감정 버튼 정의
-            emotions = {
-                "기쁨": "😊",
-                "슬픔": "😢",
-                "화남": "😠",
-                "불안": "😰",
-                "지침": "😩",
-                "혼란": "😕",
-                "희망": "🌈",
-                "감사": "🙏"
-            }
             
             # 감정 버튼 행 생성
             col1, col2, col3, col4 = st.columns(4)
